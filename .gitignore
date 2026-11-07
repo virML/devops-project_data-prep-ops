@@ -1,0 +1,20 @@
+# Python and local test outputs
+.venv/
+.jenkins-venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+reports/
+# Terraform state and local-only values
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate*
+terraform/terraform.tfvars
+*.tfplan
+# Credentials / generated
+*.pem
+.env
+.env.*
+*.key
+*.log
+.DS_Store
