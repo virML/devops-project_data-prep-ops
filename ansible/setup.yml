@@ -1,0 +1,141 @@
+---
+- name: Configure the DataPrepOps control EC2 instance
+  hosts: all
+  become: true
+  vars:
+    resource_env_file: /etc/dataprepops.env
+  tasks:
+    - name: Wait for SSH connectivity
+      ansible.builtin.wait_for_connection:
+        timeout: 300
+    - name: Install Ubuntu packages
+      ansible.builtin.apt:
+        name: [git, curl, wget, unzip, ca-certificates, python3-venv, python3-pip, docker.io, docker-compose-v2, openssl, fontconfig, openjdk-21-jdk, maven]
+        state: present
+        update_cache: true
+    - name: Start Docker
+      ansible.builtin.systemd:
+        name: docker
+        state: started
+        enabled: true
+    - name: Allow ubuntu to use Docker (root-equivalent; lab only)
+      ansible.builtin.user:
+        name: ubuntu
+        groups: docker
+        append: true
+    - name: Create keyring directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+    - name: Jenkins LTS signing key
+      ansible.builtin.get_url:
+        url: https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key
+        dest: /etc/apt/keyrings/jenkins-keyring.asc
+        mode: '0644'
+    - name: Jenkins apt source
+      ansible.builtin.apt_repository:
+        repo: 'deb [signed-by=/etc/apt/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/'
+        filename: jenkins
+        state: present
+    - name: Install Jenkins LTS
+      ansible.builtin.apt:
+        name: jenkins
+        state: present
+        update_cache: true
+    - name: Give Jenkins user access to Docker (lab only)
+      ansible.builtin.user:
+        name: jenkins
+        groups: docker
+        append: true
+    - name: Start Jenkins
+      ansible.builtin.systemd:
+        name: jenkins
+        state: restarted
+        enabled: true
+    - name: Install AWS CLI v2 archive
+      ansible.builtin.get_url:
+        url: https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+        dest: /tmp/dataprepops-awscliv2.zip
+        mode: '0644'
+    - name: Extract AWS CLI
+      ansible.builtin.unarchive:
+        src: /tmp/dataprepops-awscliv2.zip
+        dest: /tmp
+        remote_src: true
+        creates: /tmp/aws/install
+    - name: Install or upgrade AWS CLI
+      ansible.builtin.command: /tmp/aws/install --install-dir /usr/local/aws-cli --bin-dir /usr/local/bin --update
+      changed_when: false
+    - name: Install kubectl
+      ansible.builtin.shell: |
+        set -e
+        V=$(curl -fsSL https://dl.k8s.io/release/stable.txt)
+        curl -fsSL "https://dl.k8s.io/release/$V/bin/linux/amd64/kubectl" -o /usr/local/bin/kubectl
+        chmod +x /usr/local/bin/kubectl
+      args: { executable: /bin/bash, creates: /usr/local/bin/kubectl }
+    - name: Download Minikube binary
+      ansible.builtin.get_url:
+        url: https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+        dest: /usr/local/bin/minikube
+        mode: '0755'
+    - name: Write cloud resource environment (no credentials)
+      ansible.builtin.copy:
+        dest: '{{ resource_env_file }}'
+        mode: '0644'
+        content: |
+          AWS_REGION={{ aws_region }}
+          AWS_DEFAULT_REGION={{ aws_region }}
+          S3_BUCKET={{ s3_bucket }}
+          SQS_QUEUE_URL={{ sqs_queue_url }}
+          ECR_WORKER_URI={{ ecr_worker_uri }}
+          UI_ORIGIN=http://localhost:8081
+    - name: Create demonstration Python virtual environment
+      ansible.builtin.command: python3 -m venv /opt/dataprepops-demo-venv
+      args: { creates: /opt/dataprepops-demo-venv/bin/python }
+    - name: Install boto3 into demo environment
+      ansible.builtin.pip:
+        name: boto3
+        virtualenv: /opt/dataprepops-demo-venv
+    - name: Start Minikube Kubernetes (owned by Jenkins user)
+      become_user: jenkins
+      ansible.builtin.command: /usr/local/bin/minikube start --driver=docker --cpus=2 --memory=2560 --disk-size=12g
+      environment:
+        HOME: /var/lib/jenkins
+      register: minikube_output
+      changed_when: "'Done!' in minikube_output.stdout or 'Starting' in minikube_output.stdout"
+    - name: Install frontend port-forward service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/dataprepops-frontend.service
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=DataPrepOps Kubernetes frontend port-forward
+          After=network-online.target docker.service
+          [Service]
+          User=jenkins
+          Environment=HOME=/var/lib/jenkins
+          ExecStart=/usr/local/bin/kubectl --kubeconfig=/var/lib/jenkins/.kube/config -n dataprepops port-forward --address 127.0.0.1 service/dataprepops-frontend 8081:80
+          Restart=always
+          RestartSec=6
+          [Install]
+          WantedBy=multi-user.target
+    - name: Register port-forward systemd unit (start after Blue deployment)
+      ansible.builtin.systemd:
+        name: dataprepops-frontend.service
+        daemon_reload: true
+        enabled: false
+    - name: Allow Jenkins to restart only the classroom frontend tunnel service
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/dataprepops-portforward
+        mode: '0440'
+        validate: '/usr/sbin/visudo -cf %s'
+        content: |
+          jenkins ALL=(root) NOPASSWD: /usr/bin/systemctl restart dataprepops-frontend.service
+    - name: Show version checks
+      ansible.builtin.command: /usr/local/bin/kubectl version --client
+      register: version_check
+      changed_when: false
+    - name: Kubernetes client
+      ansible.builtin.debug:
+        msg: '{{ version_check.stdout }}'

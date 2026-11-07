@@ -1,0 +1,7 @@
+# Copy to terraform/terraform.tfvars. Never commit the real file.
+aws_region           = "ap-south-1"
+key_name             = "REPLACE_WITH_YOUR_EXISTING_EC2_KEY_NAME"
+admin_cidr           = "REPLACE_WITH_YOUR_PUBLIC_IP/32"
+control_instance_type = "m7i-flex.large" # 8 GiB RAM; 16 GiB can help for SonarQube + Minikube
+worker_instance_type = "t3.micro"       # only if your account allows this size
+alert_email          = ""               # optional; confirm SNS email subscription

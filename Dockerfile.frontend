@@ -1,0 +1,9 @@
+FROM python:3.12-slim-bookworm
+ARG VERSION=blue
+RUN groupadd -g 10001 dpops && useradd -u 10001 -g dpops -M dpops
+WORKDIR /opt/web
+COPY --chown=10001:10001 index.html ./index.html
+RUN printf 'window.DEPLOYMENT_VERSION="%s";\n' "$VERSION" > version.js && chown 10001:10001 version.js
+USER 10001:10001
+EXPOSE 8080
+CMD ["python", "-m", "http.server", "8080", "--bind", "0.0.0.0", "--directory", "/opt/web"]

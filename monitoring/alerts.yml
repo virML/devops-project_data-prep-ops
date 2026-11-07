@@ -1,0 +1,16 @@
+groups:
+  - name: dataprepops-service
+    rules:
+      - alert: DataPrepOpsAPIDown
+        expr: up{job="dataprepops-api"} == 0
+        for: 45s
+        labels: {severity: warning}
+        annotations:
+          summary: "DataPrepOps API cannot be scraped"
+          description: "API metric target has been unavailable for at least 45 seconds"
+      - alert: DataPrepOpsUnauthorizedRequests
+        expr: increase(dataprepops_http_requests_total{status="401"}[2m]) >= 3
+        for: 0m
+        labels: {severity: warning}
+        annotations:
+          summary: "Three or more unauthorized API requests in 2 minutes"

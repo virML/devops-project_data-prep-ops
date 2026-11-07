@@ -1,0 +1,12 @@
+global:
+  resolve_timeout: 5m
+route:
+  receiver: classroom-demo
+  group_by: ['alertname']
+  group_wait: 10s
+  group_interval: 30s
+  repeat_interval: 4h
+receivers:
+  - name: classroom-demo
+# Classroom receiver is intentionally notification-free.
+# AWS CloudWatch + SNS handles external email notifications.

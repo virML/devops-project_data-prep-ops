@@ -1,0 +1,9 @@
+patient_id,age,region,biomarker
+P01,44,North,3.1
+P02,51,South,4.2
+P03,,North,3.5
+P02,51,South,4.2
+P04,63,,9.0
+P05,39,West,
+P06,47,North,4.0
+P07,,East,3.8

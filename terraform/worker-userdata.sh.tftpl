@@ -1,0 +1,49 @@
+#!/bin/bash
+set -euxo pipefail
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y docker.io python3-venv python3-pip ca-certificates
+systemctl enable --now docker
+python3 -m venv /opt/dataprepops-bootstrap
+/opt/dataprepops-bootstrap/bin/pip install --quiet boto3
+mkdir -p /opt/dataprepops
+cat > /opt/dataprepops/login-ecr.py <<'PY'
+import base64
+import boto3
+import subprocess
+region = '${aws_region}'
+uri = '${ecr_repository_uri}'
+client = boto3.client('ecr', region_name=region)
+auth = client.get_authorization_token()['authorizationData'][0]
+user, password = base64.b64decode(auth['authorizationToken']).decode().split(':', 1)
+subprocess.run(['docker','login','--username',user,'--password-stdin',uri.split('/')[0]],input=password.encode(),check=True)
+PY
+cat > /usr/local/bin/dataprepops-worker-start <<'START'
+#!/bin/bash
+set -euo pipefail
+# Bootstrap may run before CI publishes the first image; retry safely.
+/opt/dataprepops-bootstrap/bin/python /opt/dataprepops/login-ecr.py
+docker pull '${ecr_repository_uri}:latest'
+docker rm -f dataprepops-worker >/dev/null 2>&1 || true
+docker run -d --name dataprepops-worker --restart unless-stopped \
+  -e AWS_REGION='${aws_region}' -e S3_BUCKET='${s3_bucket}' \
+  -e SQS_QUEUE_URL='${sqs_queue_url}' '${ecr_repository_uri}:latest' python worker.py
+START
+chmod +x /usr/local/bin/dataprepops-worker-start
+cat >/etc/systemd/system/dataprepops-worker-bootstrap.service <<'SERVICE'
+[Unit]
+Description=Start DataPrepOps SQS worker from private ECR
+After=docker.service network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/dataprepops-worker-start
+Restart=on-failure
+RestartSec=30
+[Install]
+WantedBy=multi-user.target
+SERVICE
+systemctl daemon-reload
+systemctl enable dataprepops-worker-bootstrap.service
+systemctl start dataprepops-worker-bootstrap.service || true

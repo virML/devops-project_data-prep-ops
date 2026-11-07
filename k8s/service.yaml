@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: dataprepops-frontend
+  namespace: dataprepops
+spec:
+  type: ClusterIP
+  selector: {app: dataprepops-ui, color: blue}
+  ports:
+    - {port: 80, targetPort: 8080}
