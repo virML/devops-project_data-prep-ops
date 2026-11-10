@@ -17,7 +17,7 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: frontend
-          image: dataprepops-frontend:__BUILD_TAG__
+          image: dataprepops-ui:__BUILD_TAG__
           imagePullPolicy: Never
           securityContext:
             runAsNonRoot: true
