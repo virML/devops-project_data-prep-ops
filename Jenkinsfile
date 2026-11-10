@@ -27,7 +27,7 @@ pipeline {
             set -euo pipefail
             curl -fsS http://127.0.0.1:9000/api/system/status | grep -q '"UP"'
             docker run --rm --network host \
-              -v "$PWD:/usr/src:rw" -w /usr/src --user "$(id -u):$(id -g)" \
+              -v "$PWD:/usr/src:rw" -w /usr/src \
               -e SONAR_HOST_URL=http://127.0.0.1:9000 -e SONAR_TOKEN \
               -e SONAR_USER_HOME=/tmp/sonar-cache \
               sonarsource/sonar-scanner-cli:latest \
