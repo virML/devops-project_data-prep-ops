@@ -87,7 +87,7 @@ pipeline {
               -p 127.0.0.1:8082:8082 \
               -e AWS_REGION -e S3_BUCKET -e SQS_QUEUE_URL -e UI_ORIGIN \
               -e DATAPREPOPS_API_KEY "dataprepops-app:build-${BUILD_NUMBER}"
-            curl --retry 20 --retry-delay 2 --retry-connrefused -fsS http://127.0.0.1:8082/healthz
+            curl --retry 30 --retry-delay 2 --retry-all-errors --max-time 5 -fsS http://127.0.0.1:8082/healthz
           '''
         }
       }
